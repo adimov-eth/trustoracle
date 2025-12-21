@@ -1,6 +1,5 @@
 import "dotenv/config";
-import { createWalletClient, http } from "viem";
-import { defineChain } from "viem/chains";
+import { createWalletClient, defineChain, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 const rpcUrl = process.env.XDC_RPC_URL;

@@ -73,6 +73,7 @@ contract TrustSignalOracleTest is Test {
     }
 
     function test_ExpiredStatus_RequiresAuth() public {
+        vm.warp(10);
         _setStatus(sender, ITrustSignalOracle.RiskLevel.GREEN, _past());
         _setStatus(receiver, ITrustSignalOracle.RiskLevel.GREEN, _past());
 

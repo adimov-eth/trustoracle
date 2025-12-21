@@ -2,7 +2,9 @@
   "name": "trustsignal-poc",
   "private": true,
   "workspaces": [
+    "admin",
     "backend",
+    "frontend",
     "scripts",
     "shared"
   ]

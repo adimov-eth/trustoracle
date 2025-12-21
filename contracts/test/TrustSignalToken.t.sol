@@ -103,6 +103,7 @@ contract TrustSignalTokenTest is Test {
     }
 
     function test_ComplianceToggle() public {
+        _setStatus(sender, ITrustSignalOracle.RiskLevel.GREEN, _future());
         token.setComplianceEnabled(true);
 
         vm.prank(sender);

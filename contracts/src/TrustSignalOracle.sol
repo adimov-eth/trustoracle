@@ -9,7 +9,7 @@ import "./interfaces/ITrustSignalOracle.sol";
 contract TrustSignalOracle is Ownable, ITrustSignalOracle {
     using ECDSA for bytes32;
 
-    mapping(address => WalletStatus) public override walletStatus;
+    mapping(address => WalletStatus) private _walletStatus;
     mapping(address => uint256) public override authNonces;
     mapping(address => bool) public override authorizedSigners;
 
@@ -67,8 +67,8 @@ contract TrustSignalOracle is Ownable, ITrustSignalOracle {
         address to,
         uint256 amount
     ) external view override returns (bool allowed, string memory reason) {
-        WalletStatus memory senderStatus = walletStatus[from];
-        WalletStatus memory receiverStatus = walletStatus[to];
+        WalletStatus memory senderStatus = _walletStatus[from];
+        WalletStatus memory receiverStatus = _walletStatus[to];
 
         if (senderStatus.riskLevel == RiskLevel.RED) {
             return (false, "SENDER_BLOCKED");
@@ -182,7 +182,7 @@ contract TrustSignalOracle is Ownable, ITrustSignalOracle {
             resolvedValidUntil = uint40(block.timestamp + defaultValidityPeriod);
         }
 
-        walletStatus[wallet] = WalletStatus({
+        _walletStatus[wallet] = WalletStatus({
             riskLevel: riskLevel,
             validUntil: resolvedValidUntil,
             lastUpdated: uint40(block.timestamp),
@@ -190,5 +190,9 @@ contract TrustSignalOracle is Ownable, ITrustSignalOracle {
         });
 
         emit WalletStatusUpdated(wallet, riskLevel, resolvedValidUntil, countryCode);
+    }
+
+    function walletStatus(address wallet) external view override returns (WalletStatus memory) {
+        return _walletStatus[wallet];
     }
 }

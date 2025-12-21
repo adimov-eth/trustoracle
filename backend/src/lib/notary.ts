@@ -1,4 +1,6 @@
 import { config } from "../config";
+import { getWalletStatus } from "./blockchain";
+import { riskLevelFromNumber } from "./risk";
 import type { RiskLevel } from "./risk";
 
 export type NotaryStatus = {
@@ -8,27 +10,51 @@ export type NotaryStatus = {
 };
 
 export async function queryNotaryNode(wallet: string): Promise<NotaryStatus> {
-  const normalized = wallet.toLowerCase();
-
-  if (normalized.startsWith("0xtest")) {
-    return {
-      riskLevel: "GREEN",
-      validUntil: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
-      countryCode: "US"
-    };
-  }
-
   if (config.notaryNodeUrl) {
-    return {
-      riskLevel: "UNKNOWN",
-      validUntil: 0,
-      countryCode: ""
-    };
+    try {
+      return await fetchFromNotaryNode(wallet);
+    } catch (error) {
+      console.warn("Notary node fetch failed, falling back to on-chain status.", error);
+    }
   }
+
+  const onChainStatus = await getWalletStatus(wallet as `0x${string}`);
+
+  if (onChainStatus.riskLevel === 0) {
+    return { riskLevel: "UNKNOWN", validUntil: 0, countryCode: "" };
+  }
+
+  const riskLevel = riskLevelFromNumber(onChainStatus.riskLevel);
 
   return {
-    riskLevel: "UNKNOWN",
-    validUntil: 0,
-    countryCode: ""
+    riskLevel,
+    validUntil: onChainStatus.validUntil,
+    countryCode: onChainStatus.countryCode
+  };
+}
+
+async function fetchFromNotaryNode(wallet: string): Promise<NotaryStatus> {
+  const base = config.notaryNodeUrl.replace(/\/$/, "");
+  const res = await fetch(`${base}/status/${wallet}`);
+
+  if (!res.ok) {
+    throw new Error(`Notary node error: ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    riskLevel?: RiskLevel | number;
+    validUntil?: number;
+    countryCode?: string;
+  };
+
+  const riskLevel =
+    typeof data.riskLevel === "number"
+      ? riskLevelFromNumber(data.riskLevel)
+      : data.riskLevel ?? "UNKNOWN";
+
+  return {
+    riskLevel,
+    validUntil: Number(data.validUntil ?? 0),
+    countryCode: data.countryCode ?? ""
   };
 }

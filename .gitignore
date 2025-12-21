@@ -34,3 +34,6 @@ contracts/out/
 contracts/cache/
 contracts/broadcast/
 contracts/lib/
+
+# Local data
+backend/data/

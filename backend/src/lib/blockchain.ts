@@ -1,8 +1,8 @@
-import { createPublicClient, createWalletClient, http } from "viem";
-import { defineChain } from "viem/chains";
+import { createPublicClient, createWalletClient, defineChain, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { config } from "../config";
+import { oracleAbi } from "../abi";
 
 const chain = defineChain({
   id: config.chainId,
@@ -10,40 +10,6 @@ const chain = defineChain({
   nativeCurrency: { name: "XDC", symbol: "XDC", decimals: 18 },
   rpcUrls: { default: { http: [config.rpcUrl] } }
 });
-
-export const oracleAbi = [
-  {
-    type: "function",
-    name: "walletStatus",
-    stateMutability: "view",
-    inputs: [{ name: "wallet", type: "address" }],
-    outputs: [
-      { name: "riskLevel", type: "uint8" },
-      { name: "validUntil", type: "uint40" },
-      { name: "lastUpdated", type: "uint40" },
-      { name: "countryCode", type: "bytes2" }
-    ]
-  },
-  {
-    type: "function",
-    name: "authNonces",
-    stateMutability: "view",
-    inputs: [{ name: "wallet", type: "address" }],
-    outputs: [{ name: "nonce", type: "uint256" }]
-  },
-  {
-    type: "function",
-    name: "setWalletStatusBatch",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "wallets", type: "address[]" },
-      { name: "riskLevels", type: "uint8[]" },
-      { name: "validUntils", type: "uint40[]" },
-      { name: "countryCodes", type: "bytes2[]" }
-    ],
-    outputs: []
-  }
-] as const;
 
 export const publicClient = createPublicClient({
   chain,
