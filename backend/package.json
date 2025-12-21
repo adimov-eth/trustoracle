@@ -1,0 +1,19 @@
+{
+  "name": "@trustsignal/backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.2.1",
+    "dotenv": "^16.4.5",
+    "hono": "^4.4.0",
+    "viem": "^2.9.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "bun-types": "^1.1.13"
+  }
+}
