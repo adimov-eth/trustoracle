@@ -1,4 +1,5 @@
 export type RiskLevel = "UNKNOWN" | "GREEN" | "YELLOW" | "RED";
+export type RiskLevelNumber = 0 | 1 | 2 | 3;
 
 export type WalletStatus = {
   riskLevel: RiskLevel;
@@ -14,6 +15,11 @@ export type Authorization = {
   nonce: bigint;
   expiry: number;
   signature: `0x${string}`;
+};
+
+export type AuthorizationWire = Omit<Authorization, "amount" | "nonce"> & {
+  amount: string;
+  nonce: string;
 };
 
 export type NotaryStatus = {

@@ -1,51 +1,67 @@
-import { encodeAbiParameters, keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-
 import { config } from "../config";
 
-export type Authorization = {
-  from: `0x${string}`;
-  to: `0x${string}`;
-  amount: bigint;
-  nonce: bigint;
-  expiry: number;
-  signature: `0x${string}`;
-};
+const COMPLETE_TRANSFER_TYPES = {
+  CompleteTransfer: [
+    { name: "transferId", type: "bytes32" },
+    { name: "from", type: "address" },
+    { name: "to", type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "deadline", type: "uint256" }
+  ]
+} as const;
 
-export async function generateAuthorization(
-  from: `0x${string}`,
-  to: `0x${string}`,
-  amount: bigint,
-  nonce: bigint
-): Promise<Authorization> {
-  const expiry = Math.floor(Date.now() / 1000) + config.authExpirySeconds;
+const REJECT_TRANSFER_TYPES = {
+  RejectTransfer: [
+    { name: "transferId", type: "bytes32" },
+    { name: "from", type: "address" },
+    { name: "to", type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "reason", type: "string" },
+    { name: "deadline", type: "uint256" }
+  ]
+} as const;
 
-  const messageHash = hashAuthorization(from, to, amount, nonce, expiry);
-  const account = privateKeyToAccount(config.signerPrivateKey);
-  const signature = (await account.signMessage({ message: { raw: messageHash } })) as `0x${string}`;
-
-  return { from, to, amount, nonce, expiry, signature };
+function getDomain() {
+  return {
+    name: "TrustSignal Token",
+    version: "1",
+    chainId: BigInt(config.chainId),
+    verifyingContract: config.tokenAddress
+  } as const;
 }
 
-export function hashAuthorization(
+export async function signCompleteTransfer(
+  transferId: `0x${string}`,
   from: `0x${string}`,
   to: `0x${string}`,
   amount: bigint,
-  nonce: bigint,
-  expiry: number
-): `0x${string}` {
-  const encoded = encodeAbiParameters(
-    [
-      { type: "address" },
-      { type: "address" },
-      { type: "uint256" },
-      { type: "uint256" },
-      { type: "uint40" },
-      { type: "uint256" },
-      { type: "address" }
-    ],
-    [from, to, amount, nonce, BigInt(expiry), BigInt(config.chainId), config.oracleAddress]
-  );
+  deadline: bigint
+): Promise<`0x${string}`> {
+  const account = privateKeyToAccount(config.signerPrivateKey);
 
-  return keccak256(encoded);
+  return account.signTypedData({
+    domain: getDomain(),
+    types: COMPLETE_TRANSFER_TYPES,
+    primaryType: "CompleteTransfer",
+    message: { transferId, from, to, amount, deadline }
+  });
+}
+
+export async function signRejectTransfer(
+  transferId: `0x${string}`,
+  from: `0x${string}`,
+  to: `0x${string}`,
+  amount: bigint,
+  reason: string,
+  deadline: bigint
+): Promise<`0x${string}`> {
+  const account = privateKeyToAccount(config.signerPrivateKey);
+
+  return account.signTypedData({
+    domain: getDomain(),
+    types: REJECT_TRANSFER_TYPES,
+    primaryType: "RejectTransfer",
+    message: { transferId, from, to, amount, reason, deadline }
+  });
 }

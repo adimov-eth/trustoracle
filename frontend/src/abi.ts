@@ -44,27 +44,5 @@ export const tokenAbi = [
       { name: "amount", type: "uint256" }
     ],
     outputs: [{ name: "success", type: "bool" }]
-  },
-  {
-    type: "function",
-    name: "transferWithAuth",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "to", type: "address" },
-      { name: "amount", type: "uint256" },
-      {
-        name: "auth",
-        type: "tuple",
-        components: [
-          { name: "from", type: "address" },
-          { name: "to", type: "address" },
-          { name: "amount", type: "uint256" },
-          { name: "nonce", type: "uint256" },
-          { name: "expiry", type: "uint40" },
-          { name: "signature", type: "bytes" }
-        ]
-      }
-    ],
-    outputs: [{ name: "success", type: "bool" }]
   }
 ] as const;

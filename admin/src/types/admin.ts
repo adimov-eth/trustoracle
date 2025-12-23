@@ -1,11 +1,8 @@
-export type RiskLevel = "UNKNOWN" | "GREEN" | "YELLOW" | "RED";
+import type { WalletStatus } from "@trustsignal/shared/types/oracle";
 
-export type WalletRecord = {
+export type WalletRecord = Omit<WalletStatus, "lastUpdated"> & {
   address: string;
-  riskLevel: RiskLevel;
-  validUntil: number;
   lastUpdated: number;
-  countryCode: string;
   firstSeen: number;
   updateCount: number;
 };

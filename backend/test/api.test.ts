@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test, describe, beforeAll } from "bun:test";
 import { Hono } from "hono";
 
 function seedEnv() {
@@ -10,39 +10,31 @@ function seedEnv() {
   process.env.TOKEN_ADDRESS = "0x0000000000000000000000000000000000000002";
 }
 
-test("authorize rejects mismatched chainId", async () => {
-  seedEnv();
-  const { authorizeRoute } = await import("../src/routes/authorize");
-
-  const app = new Hono();
-  app.route("/api/v1/authorize", authorizeRoute);
-
-  const res = await app.request("/api/v1/authorize", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      from: "0x0000000000000000000000000000000000000003",
-      to: "0x0000000000000000000000000000000000000004",
-      amount: "1",
-      chainId: 1
-    })
+describe("API Routes", () => {
+  beforeAll(() => {
+    seedEnv();
   });
 
-  expect(res.status).toBe(400);
-});
+  test("status route rejects invalid wallet address", async () => {
+    const { statusRoute } = await import("../src/routes/status");
 
-test("status and nonce routes reject invalid wallet params", async () => {
-  seedEnv();
-  const { statusRoute } = await import("../src/routes/status");
-  const { nonceRoute } = await import("../src/routes/nonce");
+    const app = new Hono();
+    app.route("/api/v1/status", statusRoute);
 
-  const app = new Hono();
-  app.route("/api/v1/status", statusRoute);
-  app.route("/api/v1/nonce", nonceRoute);
+    const res = await app.request("/api/v1/status/not-an-address");
+    expect(res.status).toBe(400);
+  });
 
-  const statusRes = await app.request("/api/v1/status/not-an-address");
-  const nonceRes = await app.request("/api/v1/nonce/not-an-address");
+  test("status route accepts valid address format", async () => {
+    const { statusRoute } = await import("../src/routes/status");
 
-  expect(statusRes.status).toBe(400);
-  expect(nonceRes.status).toBe(400);
+    const app = new Hono();
+    app.route("/api/v1/status", statusRoute);
+
+    // This will fail to get actual data but should pass validation
+    const res = await app.request("/api/v1/status/0x0000000000000000000000000000000000000003");
+    // Should not be 400 (validation error)
+    expect(res.status).not.toBe(400);
+  });
+
 });

@@ -1,13 +1,7 @@
 import { config } from "../config";
 import { getWalletStatus } from "./blockchain";
 import { riskLevelFromNumber } from "./risk";
-import type { RiskLevel } from "./risk";
-
-export type NotaryStatus = {
-  riskLevel: RiskLevel;
-  validUntil: number;
-  countryCode: string;
-};
+import type { NotaryStatus, RiskLevel } from "@trustsignal/shared/types/oracle";
 
 export async function queryNotaryNode(wallet: string): Promise<NotaryStatus> {
   if (config.notaryNodeUrl) {

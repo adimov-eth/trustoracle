@@ -240,3 +240,9 @@ export function setLastSyncedBlock(block: number): void {
   );
   stmt.run(block.toString());
 }
+
+export function getEventCount(): number {
+  const stmt = db.prepare("SELECT COUNT(*) as total FROM status_events");
+  const result = stmt.get() as { total: number } | undefined;
+  return result?.total ?? 0;
+}

@@ -57,4 +57,6 @@ interface ITrustSignalOracle {
     function authNonces(address wallet) external view returns (uint256);
 
     function authorizedSigners(address signer) external view returns (bool);
+
+    function setAuthorizedSigner(address signer, bool authorized) external;
 }

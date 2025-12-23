@@ -4,6 +4,7 @@ import { config } from "../config";
 import { publicClient } from "../lib/blockchain";
 import {
   getLastSyncedBlock,
+  getEventCount,
   insertEvent,
   setLastSyncedBlock,
   upsertWallet
@@ -12,6 +13,16 @@ import {
 const WALLET_STATUS_UPDATED_EVENT = parseAbiItem(
   "event WalletStatusUpdated(address indexed wallet, uint8 riskLevel, uint40 validUntil, bytes2 countryCode)"
 );
+
+// Track indexer status for health checks
+let latestIndexedBlock = 0;
+
+export function getIndexerStatus(): { latestBlock: number; eventsCount: number } {
+  return {
+    latestBlock: latestIndexedBlock || getLastSyncedBlock(),
+    eventsCount: getEventCount()
+  };
+}
 
 export async function startIndexer(): Promise<void> {
   if (!config.oracleAddress) {
@@ -59,6 +70,7 @@ async function syncHistoricalEvents(): Promise<void> {
     }
 
     setLastSyncedBlock(Number(toBlock));
+    latestIndexedBlock = Number(toBlock);
     fromBlock = toBlock + 1n;
   }
 
@@ -78,6 +90,7 @@ function watchNewEvents(): void {
         await processEvent(log);
         if (log.blockNumber) {
           setLastSyncedBlock(Number(log.blockNumber));
+          latestIndexedBlock = Number(log.blockNumber);
         }
       }
     }

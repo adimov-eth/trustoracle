@@ -10,9 +10,9 @@ import {
 } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { formatUnits, isAddress, parseUnits } from "viem";
+import type { RiskLevel, WalletStatus } from "@trustsignal/shared/types/oracle";
 
 import { oracleAbi, tokenAbi } from "./abi";
-import { requestAuthorization } from "./api";
 import {
   APP_NAME,
   BACKEND_URL,
@@ -24,7 +24,7 @@ import {
   TOKEN_SYMBOL
 } from "./config";
 
-const RISK_LABELS = ["UNKNOWN", "GREEN", "YELLOW", "RED"] as const;
+const RISK_LEVELS: RiskLevel[] = ["UNKNOWN", "GREEN", "YELLOW", "RED"];
 
 type PreflightState =
   | { state: "idle" }
@@ -149,9 +149,9 @@ export default function App() {
     amount
   ]);
 
-  const walletStatus = useMemo(() => {
+  const walletStatus = useMemo<WalletStatus | null>(() => {
     if (!statusData) return null;
-    const [riskLevel, validUntil, , countryCode] = statusData as readonly [
+    const [riskLevelNumber, validUntil, , countryCode] = statusData as readonly [
       number,
       number,
       number,
@@ -159,15 +159,13 @@ export default function App() {
     ];
 
     return {
-      riskLevel,
+      riskLevel: RISK_LEVELS[Math.min(riskLevelNumber, 3)] ?? "UNKNOWN",
       validUntil,
       countryCode: bytes2ToString(countryCode)
     };
   }, [statusData]);
 
-  const riskLabel = walletStatus
-    ? RISK_LABELS[Math.min(walletStatus.riskLevel, 3)]
-    : "UNKNOWN";
+  const riskLabel = walletStatus?.riskLevel ?? "UNKNOWN";
 
   const balanceRaw = balance
     ? formatUnits(balance as bigint, TOKEN_DECIMALS)
@@ -212,20 +210,17 @@ export default function App() {
     let amountWei: bigint;
     try {
       amountWei = parseUnits(amount, TOKEN_DECIMALS);
-    } catch (error) {
+    } catch {
       setTxError("Enter a valid amount.");
       return;
     }
-
-    // Check if preflight indicates authorization is needed
-    const needsAuth = preflight.state === "ready" &&
-                      !preflight.allowed &&
-                      preflight.reason === "AUTHORIZATION_REQUIRED";
 
     setTxState("signing");
     setTxHash(null);
 
     try {
+      // With escrow pattern, just call transfer() - it never reverts for auth_required
+      // Low-risk transfers complete instantly, high-risk transfers are escrowed
       const hash = await writeContractAsync({
         address: TOKEN_ADDRESS,
         abi: tokenAbi,
@@ -235,43 +230,6 @@ export default function App() {
 
       setTxHash(hash);
     } catch (error) {
-      // Use preflight result instead of trying to parse error
-      if (needsAuth || isAuthorizationRequired(error)) {
-        try {
-          const authResponse = await requestAuthorization(
-            accountAddress,
-            to as `0x${string}`,
-            amountWei.toString()
-          );
-
-          const auth = authResponse.authorization;
-
-          const hash = await writeContractAsync({
-            address: TOKEN_ADDRESS,
-            abi: tokenAbi,
-            functionName: "transferWithAuth",
-            args: [
-              to as `0x${string}`,
-              amountWei,
-              {
-                from: auth.from,
-                to: auth.to,
-                amount: BigInt(auth.amount),
-                nonce: BigInt(auth.nonce),
-                expiry: Number(auth.expiry),
-                signature: auth.signature
-              }
-            ]
-          });
-
-          setTxHash(hash);
-        } catch (authError) {
-          setTxState("error");
-          setTxError(formatError(authError) ?? "Authorization failed");
-        }
-        return;
-      }
-
       setTxState("error");
       setTxError(formatError(error) ?? "Transfer failed");
     }
@@ -284,9 +242,8 @@ export default function App() {
           <p className="eyebrow">Compliance Engine</p>
           <h1>{APP_NAME}</h1>
           <p className="lead">
-            Move TST across XDC Apothem with instant low-risk transfers and
-            cryptographic authorizations for anything that needs fresh
-            compliance.
+            Move TST across XDC Apothem with instant low-risk transfers.
+            High-risk transfers are escrowed and processed by the compliance backend.
           </p>
           <div className="hero-actions">
             <ConnectButton chainStatus="icon" showBalance={false} />
@@ -365,8 +322,7 @@ export default function App() {
             </div>
           </div>
           <p className="muted">
-            Oracle reads decide whether transfers are instant, authorized, or
-            blocked.
+            Oracle reads determine transfer behavior: instant, escrowed, or blocked.
           </p>
         </div>
 
@@ -434,7 +390,7 @@ export default function App() {
                 {txState === "signing" ? "Approve in wallet" : "Send"}
               </button>
               {txState === "confirming" && <span>Confirming on-chain...</span>}
-              {txState === "success" && <span>Transfer confirmed</span>}
+              {txState === "success" && <span>Transfer submitted</span>}
             </div>
             {txHash && (
               <a
@@ -452,24 +408,24 @@ export default function App() {
 
       <section className="panel spotlight">
         <div>
-          <h2>Authorization Flow</h2>
+          <h2>Escrow-Based Compliance</h2>
           <p>
-            High-value transfers prompt the backend to sign a short-lived
-            authorization. The token contract verifies it before moving funds.
+            Transfers never revert for compliance. Low-risk transfers complete instantly.
+            High-risk transfers are escrowed until the backend validates and releases them.
           </p>
         </div>
         <div className="steps">
           <div>
             <span>01</span>
-            <p>Backend checks compliance in real time.</p>
+            <p>User sends tokens (always succeeds)</p>
           </div>
           <div>
             <span>02</span>
-            <p>Signer returns a time-bound authorization.</p>
+            <p>Backend validates compliance</p>
           </div>
           <div>
             <span>03</span>
-            <p>Transfer executes with fresh data on-chain.</p>
+            <p>Backend releases or rejects transfer</p>
           </div>
         </div>
       </section>
@@ -493,8 +449,7 @@ function buildPreflightCallout(preflight: PreflightState):
   if (preflight.reason === "AUTHORIZATION_REQUIRED") {
     return {
       tone: "warning",
-      message:
-        "Authorization required. The backend will sign this transfer before submit."
+      message: "Transfer will be escrowed for backend approval."
     };
   }
   return { tone: "error", message: `Blocked: ${preflight.reason}` };
@@ -528,41 +483,6 @@ function formatError(error: unknown): string | null {
     );
   }
   return null;
-}
-
-function isAuthorizationRequired(error: unknown): boolean {
-  console.log('[DEBUG] Checking authorization error:', error);
-
-  const message = formatError(error) ?? "";
-  console.log('[DEBUG] Formatted message:', message);
-  if (message.includes("AUTHORIZATION_REQUIRED")) return true;
-
-  // Check for viem/wagmi error structure
-  if (error && typeof error === "object") {
-    try {
-      // Use replacer to handle BigInt serialization
-      const errorStr = JSON.stringify(error, (_, value) =>
-        typeof value === 'bigint' ? value.toString() : value
-      );
-      console.log('[DEBUG] Stringified error:', errorStr.substring(0, 500));
-      if (errorStr.includes("AUTHORIZATION_REQUIRED")) return true;
-    } catch (e) {
-      console.log('[DEBUG] Stringify failed, using manual search:', e);
-      // If stringify still fails, do manual deep search
-      const searchError = (obj: any): boolean => {
-        if (!obj || typeof obj !== 'object') return false;
-        for (const key in obj) {
-          const val = obj[key];
-          if (typeof val === 'string' && val.includes("AUTHORIZATION_REQUIRED")) return true;
-          if (typeof val === 'object' && searchError(val)) return true;
-        }
-        return false;
-      };
-      return searchError(error);
-    }
-  }
-
-  return false;
 }
 
 function formatAmount(value: bigint, decimals: number): string {
