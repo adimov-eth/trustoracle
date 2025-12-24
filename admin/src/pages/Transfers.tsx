@@ -209,10 +209,25 @@ function formatDate(timestamp: number) {
   });
 }
 
-function formatAmount(amount: string) {
-  const num = parseFloat(amount);
-  if (isNaN(num)) return amount;
-  return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
+function formatAmount(amountWei: string) {
+  try {
+    const wei = BigInt(amountWei);
+    const decimals = 18;
+    const divisor = BigInt(10 ** decimals);
+    const whole = wei / divisor;
+    const fraction = wei % divisor;
+
+    if (fraction === 0n) {
+      return `${whole.toLocaleString()} TST`;
+    }
+
+    const fractionStr = fraction.toString().padStart(decimals, "0").slice(0, 4).replace(/0+$/, "");
+    return fractionStr
+      ? `${whole.toLocaleString()}.${fractionStr} TST`
+      : `${whole.toLocaleString()} TST`;
+  } catch {
+    return amountWei;
+  }
 }
 
 function getStatusBadgeClass(status: TransferStatus): string {
