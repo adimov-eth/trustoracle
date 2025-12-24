@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 
+import { AddWalletForm } from "../components/AddWalletForm";
 import { UpdateStatusForm } from "../components/UpdateStatusForm";
 import { WalletTable } from "../components/WalletTable";
 import { useWallets } from "../hooks/useWallets";
@@ -13,6 +14,7 @@ export function Wallets() {
   const [riskLevel, setRiskLevel] = useState<string | undefined>(undefined);
   const [expiringSoon, setExpiringSoon] = useState(false);
   const [selected, setSelected] = useState<WalletRecord | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const filters = useMemo(
     () => ({
@@ -39,9 +41,14 @@ export function Wallets() {
             <h2>Wallet Registry</h2>
             <p className="muted">Indexed from on-chain WalletStatusUpdated events.</p>
           </div>
-          <button className="btn btn-ghost" onClick={() => void refetch()}>
-            Refresh
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
+              Add Wallet
+            </button>
+            <button className="btn btn-ghost" onClick={() => void refetch()}>
+              Refresh
+            </button>
+          </div>
         </div>
         <div className="filters">
           <input
@@ -111,6 +118,12 @@ export function Wallets() {
           wallet={selected}
           onClose={() => setSelected(null)}
           onUpdated={() => void refetch()}
+        />
+      )}
+      {showAddForm && (
+        <AddWalletForm
+          onClose={() => setShowAddForm(false)}
+          onCreated={() => void refetch()}
         />
       )}
     </div>

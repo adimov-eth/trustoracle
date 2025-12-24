@@ -13,6 +13,7 @@ import { formatUnits, isAddress, parseUnits } from "viem";
 import type { RiskLevel, WalletStatus } from "@trustsignal/shared/types/oracle";
 
 import { oracleAbi, tokenAbi } from "./abi";
+import { getPendingTransfers, type PendingTransfer } from "./api";
 import {
   APP_NAME,
   BACKEND_URL,
@@ -47,6 +48,7 @@ export default function App() {
   const [txState, setTxState] = useState<TxState>("idle");
   const [txError, setTxError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null);
+  const [pendingTransfers, setPendingTransfers] = useState<PendingTransfer[]>([]);
 
   const accountAddress = address as `0x${string}` | undefined;
   const isCorrectChain = chainId === CHAIN_ID;
@@ -149,6 +151,23 @@ export default function App() {
     amount
   ]);
 
+  // Fetch pending transfers
+  useEffect(() => {
+    if (!accountAddress || !isConnected) {
+      setPendingTransfers([]);
+      return;
+    }
+
+    const fetchPending = async () => {
+      const transfers = await getPendingTransfers(accountAddress);
+      setPendingTransfers(transfers);
+    };
+
+    void fetchPending();
+    const interval = setInterval(fetchPending, 10000);
+    return () => clearInterval(interval);
+  }, [accountAddress, isConnected, txHash]); // Refetch when txHash changes (new transfer)
+
   const walletStatus = useMemo<WalletStatus | null>(() => {
     if (!statusData) return null;
     const [riskLevelNumber, validUntil, , countryCode] = statusData as readonly [
@@ -234,6 +253,31 @@ export default function App() {
       setTxError(formatError(error) ?? "Transfer failed");
     }
   };
+
+  const handleCancelTransfer = async (transferId: string) => {
+    if (!TOKEN_ADDRESS) return;
+
+    setTxError(null);
+    setTxState("signing");
+
+    try {
+      const hash = await writeContractAsync({
+        address: TOKEN_ADDRESS,
+        abi: tokenAbi,
+        functionName: "cancelTransfer",
+        args: [transferId as `0x${string}`]
+      });
+      setTxHash(hash);
+    } catch (error) {
+      setTxState("error");
+      setTxError(formatError(error) ?? "Cancel failed");
+    }
+  };
+
+  const activePending = pendingTransfers.filter((t) => t.status === "PENDING");
+  const recentRejections = pendingTransfers.filter(
+    (t) => t.status === "REJECTED" && t.timestamp > Date.now() / 1000 - 3600
+  );
 
   return (
     <div className="page">
@@ -343,6 +387,57 @@ export default function App() {
             Refresh balance
           </button>
         </div>
+
+        {activePending.length > 0 && (
+          <div className="panel" style={{ animationDelay: "0.12s" }}>
+            <div className="panel-header">
+              <h2>Pending Transfers</h2>
+              <span className="badge badge-warning">{activePending.length}</span>
+            </div>
+            <div className="pending-list">
+              {activePending.map((t) => (
+                <div key={t.transferId} className="pending-item">
+                  <div className="pending-info">
+                    <span className="pending-amount">
+                      {formatAmount(BigInt(t.amount), TOKEN_DECIMALS)} {TOKEN_SYMBOL}
+                    </span>
+                    <span className="pending-to">→ {shortenAddress(t.to as `0x${string}`)}</span>
+                  </div>
+                  <div className="pending-meta">
+                    <span className="pending-time">{formatRelativeTime(t.timestamp)}</span>
+                    {isTransferExpired(t.timestamp) && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => void handleCancelTransfer(t.transferId)}
+                        disabled={txState === "signing" || txState === "confirming"}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="muted">
+              Pending transfers are processed by the backend. You can cancel after 24h.
+            </p>
+          </div>
+        )}
+
+        {recentRejections.length > 0 && (
+          <div className="panel" style={{ animationDelay: "0.12s" }}>
+            <div className="panel-header">
+              <h2>Recent Rejections</h2>
+              <span className="badge badge-red">{recentRejections.length}</span>
+            </div>
+            {recentRejections.map((t) => (
+              <div key={t.transferId} className="callout callout-error">
+                Transfer of {formatAmount(BigInt(t.amount), TOKEN_DECIMALS)} {TOKEN_SYMBOL} rejected
+                {t.rejectionReason && `: ${t.rejectionReason}`}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="panel panel-wide" style={{ animationDelay: "0.15s" }}>
           <div className="panel-header">
@@ -512,4 +607,17 @@ function formatDate(timestamp: number): string {
     month: "short",
     day: "numeric"
   });
+}
+
+function formatRelativeTime(timestamp: number): string {
+  const diff = Date.now() / 1000 - timestamp;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function isTransferExpired(timestamp: number): boolean {
+  const TRANSFER_EXPIRY = 24 * 60 * 60; // 24 hours
+  return Date.now() / 1000 > timestamp + TRANSFER_EXPIRY;
 }

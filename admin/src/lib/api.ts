@@ -1,5 +1,10 @@
 import { ADMIN_API_KEY, BACKEND_URL } from "./config";
-import type { StatisticsResponse, WalletsResponse } from "../types/admin";
+import type {
+  AuditLogResponse,
+  StatisticsResponse,
+  TransfersResponse,
+  WalletsResponse
+} from "../types/admin";
 
 async function adminFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BACKEND_URL}${endpoint}`, {
@@ -49,4 +54,50 @@ export function updateWalletStatus(
     method: "POST",
     body: JSON.stringify(data)
   });
+}
+
+export function createWallet(data: {
+  address: string;
+  riskLevel: string;
+  validUntil: number;
+  countryCode: string;
+}): Promise<{ success: boolean; transactionHash: string; blockNumber: number }> {
+  return adminFetch("/api/v1/admin/wallets", {
+    method: "POST",
+    body: JSON.stringify(data)
+  });
+}
+
+export function getTransfers(params: {
+  page?: number;
+  limit?: number;
+  status?: string;
+}): Promise<TransfersResponse> {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === "") return;
+    query.set(key, String(value));
+  });
+  return adminFetch(`/api/v1/admin/transfers?${query.toString()}`);
+}
+
+export function retryTransfer(
+  transferId: string
+): Promise<{ success: boolean; message: string }> {
+  return adminFetch(`/api/v1/admin/transfers/${transferId}/retry`, {
+    method: "POST"
+  });
+}
+
+export function getAuditLog(params: {
+  targetType?: string;
+  targetId?: string;
+  limit?: number;
+}): Promise<AuditLogResponse> {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === "") return;
+    query.set(key, String(value));
+  });
+  return adminFetch(`/api/v1/admin/audit?${query.toString()}`);
 }

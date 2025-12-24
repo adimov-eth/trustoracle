@@ -21,3 +21,25 @@ export async function checkHealth(): Promise<HealthStatus> {
   const res = await fetch(`${BACKEND_URL}/health`);
   return res.json() as Promise<HealthStatus>;
 }
+
+// Pending transfers
+
+export type PendingTransfer = {
+  transferId: string;
+  from: string;
+  to: string;
+  amount: string;
+  timestamp: number;
+  status: "PENDING" | "COMPLETED" | "REJECTED" | "CANCELLED";
+  rejectionReason?: string;
+  completionHash?: string;
+};
+
+export async function getPendingTransfers(address: string): Promise<PendingTransfer[]> {
+  const res = await fetch(`${BACKEND_URL}/api/v1/transfers/${address}`);
+  if (!res.ok) {
+    return [];
+  }
+  const data = await res.json() as { transfers: PendingTransfer[] };
+  return data.transfers;
+}

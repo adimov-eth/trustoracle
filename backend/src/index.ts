@@ -6,6 +6,7 @@ import { config } from "./config";
 import { nonceRoute } from "./routes/nonce";
 import { statusRoute } from "./routes/status";
 import adminRouter from "./routes/admin";
+import transfersRouter from "./routes/transfers";
 import { initDatabase } from "./lib/db";
 import { startSyncLoop } from "./services/sync";
 import { startIndexer, getIndexerStatus } from "./services/indexer";
@@ -71,6 +72,7 @@ app.get("/health", async (c) => {
 app.route("/api/v1/status", statusRoute);
 app.route("/api/v1/nonce", nonceRoute);
 app.route("/api/v1/admin", adminRouter);
+app.route("/api/v1/transfers", transfersRouter);
 
 startSyncLoop();
 

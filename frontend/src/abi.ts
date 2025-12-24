@@ -44,5 +44,12 @@ export const tokenAbi = [
       { name: "amount", type: "uint256" }
     ],
     outputs: [{ name: "success", type: "bool" }]
+  },
+  {
+    type: "function",
+    name: "cancelTransfer",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "transferId", type: "bytes32" }],
+    outputs: []
   }
 ] as const;

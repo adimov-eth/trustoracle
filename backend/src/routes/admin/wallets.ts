@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { oracleAbi } from "../../abi";
 import { config } from "../../config";
 import { publicClient, walletClient } from "../../lib/blockchain";
-import { getWallets } from "../../lib/db";
+import { getWallets, insertAuditLog } from "../../lib/db";
 import { riskLevelFromNumber, parseRiskLevelNumber } from "../../lib/risk";
 import { parseStatusUpdate } from "../../domain/walletStatus";
 
@@ -49,14 +49,18 @@ router.get("/", (c) => {
   });
 });
 
-router.post("/:address/status", async (c) => {
+router.post("/", async (c) => {
   if (!config.oracleAddress) {
     return c.json({ error: "ORACLE_NOT_CONFIGURED" }, 500);
   }
 
   const payload = await c.req.json().catch(() => null);
+  if (!payload || typeof payload !== "object" || !payload.address) {
+    return c.json({ error: "INVALID_BODY" }, 400);
+  }
+
   const parsed = parseStatusUpdate({
-    address: c.req.param("address"),
+    address: payload.address,
     payload
   });
   if (!parsed.ok) {
@@ -76,6 +80,93 @@ router.post("/:address/status", async (c) => {
   });
 
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+  insertAuditLog({
+    timestamp: Math.floor(Date.now() / 1000),
+    action: "WALLET_STATUS_CREATED",
+    actor: "admin",
+    target_type: "wallet",
+    target_id: parsed.value.address,
+    old_value: null,
+    new_value: JSON.stringify({
+      riskLevel: riskLevelFromNumber(parsed.value.riskLevel),
+      validUntil: parsed.value.validUntil,
+      countryCode: parsed.value.countryCode
+    }),
+    tx_hash: hash,
+    metadata: null
+  });
+
+  return c.json({
+    success: true,
+    transactionHash: hash,
+    blockNumber: Number(receipt.blockNumber)
+  });
+});
+
+router.post("/:address/status", async (c) => {
+  if (!config.oracleAddress) {
+    return c.json({ error: "ORACLE_NOT_CONFIGURED" }, 500);
+  }
+
+  const payload = await c.req.json().catch(() => null);
+  const parsed = parseStatusUpdate({
+    address: c.req.param("address"),
+    payload
+  });
+  if (!parsed.ok) {
+    return c.json({ error: parsed.error }, 400);
+  }
+
+  // Get current status for audit log
+  let oldStatus: string | null = null;
+  try {
+    const [riskLevel, validUntil, , countryCode] = await publicClient.readContract({
+      address: config.oracleAddress,
+      abi: oracleAbi,
+      functionName: "getWalletStatus",
+      args: [parsed.value.address]
+    });
+    if (Number(riskLevel) !== 0) {
+      oldStatus = JSON.stringify({
+        riskLevel: riskLevelFromNumber(Number(riskLevel)),
+        validUntil: Number(validUntil),
+        countryCode: countryCode
+      });
+    }
+  } catch {
+    // Wallet may not exist yet
+  }
+
+  const hash = await walletClient.writeContract({
+    address: config.oracleAddress,
+    abi: oracleAbi,
+    functionName: "setWalletStatus",
+    args: [
+      parsed.value.address,
+      parsed.value.riskLevel,
+      BigInt(parsed.value.validUntil),
+      parsed.value.countryCodeBytes
+    ]
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+  insertAuditLog({
+    timestamp: Math.floor(Date.now() / 1000),
+    action: oldStatus ? "WALLET_STATUS_UPDATED" : "WALLET_STATUS_CREATED",
+    actor: "admin",
+    target_type: "wallet",
+    target_id: parsed.value.address,
+    old_value: oldStatus,
+    new_value: JSON.stringify({
+      riskLevel: riskLevelFromNumber(parsed.value.riskLevel),
+      validUntil: parsed.value.validUntil,
+      countryCode: parsed.value.countryCode
+    }),
+    tx_hash: hash,
+    metadata: null
+  });
 
   return c.json({
     success: true,

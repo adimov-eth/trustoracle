@@ -1,7 +1,9 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import { APP_NAME, BACKEND_URL, CHAIN_ID } from "./lib/config";
+import { AuditLog } from "./pages/AuditLog";
 import { Dashboard } from "./pages/Dashboard";
+import { Transfers } from "./pages/Transfers";
 import { Wallets } from "./pages/Wallets";
 
 export default function App() {
@@ -22,6 +24,12 @@ export default function App() {
           <NavLink to="/wallets" className={({ isActive }) => (isActive ? "active" : "")}>
             Wallet registry
           </NavLink>
+          <NavLink to="/transfers" className={({ isActive }) => (isActive ? "active" : "")}>
+            Transfer queue
+          </NavLink>
+          <NavLink to="/audit" className={({ isActive }) => (isActive ? "active" : "")}>
+            Audit log
+          </NavLink>
         </nav>
         <div className="sidebar-meta">
           <div>
@@ -38,6 +46,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/wallets" element={<Wallets />} />
+          <Route path="/transfers" element={<Transfers />} />
+          <Route path="/audit" element={<AuditLog />} />
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </main>
