@@ -42,6 +42,9 @@ export function Wallets() {
             <p className="muted">Indexed from on-chain WalletStatusUpdated events.</p>
           </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button className="btn btn-primary" onClick={() => void(true)}>
+              Notary Nodes 🟢 ▾
+            </button>
             <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
               Add Wallet
             </button>
