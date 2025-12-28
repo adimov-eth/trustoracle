@@ -89,6 +89,24 @@ export function retryTransfer(
   });
 }
 
+export function completeTransfer(
+  transferId: string
+): Promise<{ success: boolean; status: string; transactionHash: string }> {
+  return adminFetch(`/api/v1/admin/transfers/${transferId}/complete`, {
+    method: "POST"
+  });
+}
+
+export function rejectTransfer(
+  transferId: string,
+  reason: string
+): Promise<{ success: boolean; status: string; reason: string; transactionHash: string }> {
+  return adminFetch(`/api/v1/admin/transfers/${transferId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason })
+  });
+}
+
 export function getAuditLog(params: {
   targetType?: string;
   targetId?: string;

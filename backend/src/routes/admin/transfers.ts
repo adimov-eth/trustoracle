@@ -78,6 +78,179 @@ router.get("/:transferId", (c) => {
   });
 });
 
+// Manual approve - skip compliance check
+router.post("/:transferId/complete", async (c) => {
+  if (!config.tokenAddress) {
+    return c.json({ error: "TOKEN_NOT_CONFIGURED" }, 500);
+  }
+
+  const transferId = c.req.param("transferId") as `0x${string}`;
+  const transfer = getPendingTransfer(transferId);
+
+  if (!transfer) {
+    return c.json({ error: "TRANSFER_NOT_FOUND" }, 404);
+  }
+
+  if (transfer.status !== "PENDING") {
+    return c.json({ error: "TRANSFER_NOT_PENDING", currentStatus: transfer.status }, 400);
+  }
+
+  // Check on-chain status first
+  try {
+    const [, , , , onChainStatus] = await publicClient.readContract({
+      address: config.tokenAddress,
+      abi: TOKEN_ABI,
+      functionName: "getPendingTransfer",
+      args: [transferId]
+    });
+
+    if (onChainStatus !== TransferStatusEnum.PENDING) {
+      const newStatus = statusToString(onChainStatus);
+      updateTransferStatus(transferId, newStatus);
+      return c.json({
+        success: true,
+        message: "Transfer already resolved on-chain",
+        status: newStatus
+      });
+    }
+  } catch (err) {
+    return c.json({ error: "CHAIN_READ_ERROR", details: String(err) }, 500);
+  }
+
+  const from = transfer.from_address as `0x${string}`;
+  const to = transfer.to_address as `0x${string}`;
+  const amount = BigInt(transfer.amount);
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + config.authExpirySeconds);
+
+  try {
+    const signature = await signCompleteTransfer(transferId, from, to, amount, deadline);
+    const txHash = await walletClient.writeContract({
+      address: config.tokenAddress,
+      abi: TOKEN_ABI,
+      functionName: "completeTransfer",
+      args: [transferId, deadline, signature]
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+    if (receipt.status === "success") {
+      updateTransferStatus(transferId, "COMPLETED", txHash);
+
+      insertAuditLog({
+        timestamp: Math.floor(Date.now() / 1000),
+        action: "TRANSFER_COMPLETED",
+        actor: "admin_override",
+        target_type: "transfer",
+        target_id: transferId,
+        old_value: "PENDING",
+        new_value: "COMPLETED",
+        tx_hash: txHash,
+        metadata: JSON.stringify({ source: "manual_complete" })
+      });
+
+      return c.json({
+        success: true,
+        status: "COMPLETED",
+        transactionHash: txHash,
+        blockNumber: Number(receipt.blockNumber)
+      });
+    } else {
+      return c.json({ error: "TRANSACTION_REVERTED", transactionHash: txHash }, 500);
+    }
+  } catch (err) {
+    return c.json({ error: "PROCESS_ERROR", details: String(err) }, 500);
+  }
+});
+
+// Manual reject - skip compliance check, use provided reason
+router.post("/:transferId/reject", async (c) => {
+  if (!config.tokenAddress) {
+    return c.json({ error: "TOKEN_NOT_CONFIGURED" }, 500);
+  }
+
+  const transferId = c.req.param("transferId") as `0x${string}`;
+  const body = await c.req.json<{ reason?: string }>().catch(() => ({}));
+  const reason = body.reason || "ADMIN_REJECTED";
+
+  const transfer = getPendingTransfer(transferId);
+
+  if (!transfer) {
+    return c.json({ error: "TRANSFER_NOT_FOUND" }, 404);
+  }
+
+  if (transfer.status !== "PENDING") {
+    return c.json({ error: "TRANSFER_NOT_PENDING", currentStatus: transfer.status }, 400);
+  }
+
+  // Check on-chain status first
+  try {
+    const [, , , , onChainStatus] = await publicClient.readContract({
+      address: config.tokenAddress,
+      abi: TOKEN_ABI,
+      functionName: "getPendingTransfer",
+      args: [transferId]
+    });
+
+    if (onChainStatus !== TransferStatusEnum.PENDING) {
+      const newStatus = statusToString(onChainStatus);
+      updateTransferStatus(transferId, newStatus);
+      return c.json({
+        success: true,
+        message: "Transfer already resolved on-chain",
+        status: newStatus
+      });
+    }
+  } catch (err) {
+    return c.json({ error: "CHAIN_READ_ERROR", details: String(err) }, 500);
+  }
+
+  const from = transfer.from_address as `0x${string}`;
+  const to = transfer.to_address as `0x${string}`;
+  const amount = BigInt(transfer.amount);
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + config.authExpirySeconds);
+
+  try {
+    const signature = await signRejectTransfer(transferId, from, to, amount, reason, deadline);
+    const txHash = await walletClient.writeContract({
+      address: config.tokenAddress,
+      abi: TOKEN_ABI,
+      functionName: "rejectTransfer",
+      args: [transferId, reason, deadline, signature]
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+    if (receipt.status === "success") {
+      updateTransferStatus(transferId, "REJECTED", txHash, reason);
+
+      insertAuditLog({
+        timestamp: Math.floor(Date.now() / 1000),
+        action: "TRANSFER_REJECTED",
+        actor: "admin_override",
+        target_type: "transfer",
+        target_id: transferId,
+        old_value: "PENDING",
+        new_value: "REJECTED",
+        tx_hash: txHash,
+        metadata: JSON.stringify({ source: "manual_reject", reason })
+      });
+
+      return c.json({
+        success: true,
+        status: "REJECTED",
+        reason,
+        transactionHash: txHash,
+        blockNumber: Number(receipt.blockNumber)
+      });
+    } else {
+      return c.json({ error: "TRANSACTION_REVERTED", transactionHash: txHash }, 500);
+    }
+  } catch (err) {
+    return c.json({ error: "PROCESS_ERROR", details: String(err) }, 500);
+  }
+});
+
+// Retry - re-runs automated compliance check
 router.post("/:transferId/retry", async (c) => {
   if (!config.tokenAddress) {
     return c.json({ error: "TOKEN_NOT_CONFIGURED" }, 500);
