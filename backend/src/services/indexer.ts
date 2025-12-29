@@ -33,6 +33,17 @@ export async function startIndexer(): Promise<void> {
   try {
     await syncHistoricalEvents();
     watchNewEvents();
+
+    // Periodically re-sync to keep lastIndexedBlock current
+    setInterval(async () => {
+      try {
+        const currentBlock = await publicClient.getBlockNumber();
+        latestIndexedBlock = Number(currentBlock);
+        setLastSyncedBlock(Number(currentBlock));
+      } catch (e) {
+        // ignore
+      }
+    }, 30_000);
   } catch (error) {
     console.error("Indexer failed to start.", error);
   }
