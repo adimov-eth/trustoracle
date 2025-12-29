@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import type { ColumnDef } from "@tanstack/react-table";
 
-import { getTransfers, retryTransfer } from "../lib/api";
+import { getTransfers, retryTransfer, completeTransfer, rejectTransfer } from "../lib/api";
 import type { TransferRecord, TransferStatus } from "../types/admin";
 
 const STATUS_OPTIONS = ["ALL", "PENDING", "COMPLETED", "REJECTED", "CANCELLED"] as const;
@@ -12,6 +12,9 @@ export function Transfers() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<string | undefined>(undefined);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [completing, setCompleting] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   const filters = useMemo(
     () => ({
@@ -37,6 +40,32 @@ export function Transfers() {
       console.error("Retry failed:", err);
     } finally {
       setRetrying(null);
+    }
+  };
+
+  const handleComplete = async (transferId: string) => {
+    setCompleting(transferId);
+    try {
+      await completeTransfer(transferId);
+      void refetch();
+    } catch (err) {
+      console.error("Complete failed:", err);
+    } finally {
+      setCompleting(null);
+    }
+  };
+
+  const handleReject = async (transferId: string) => {
+    const reason = rejectReason.trim() || "ADMIN_REJECTED";
+    setRejecting(transferId);
+    try {
+      await rejectTransfer(transferId, reason);
+      setRejectReason("");
+      void refetch();
+    } catch (err) {
+      console.error("Reject failed:", err);
+    } finally {
+      setRejecting(null);
     }
   };
 
@@ -83,18 +112,68 @@ export function Transfers() {
       id: "actions",
       cell: ({ row }) => {
         const transfer = row.original;
-        if (transfer.status === "PENDING" && transfer.processAttempts > 0) {
-          return (
+        if (transfer.status !== "PENDING") return null;
+
+        const isProcessing = completing === transfer.transferId || rejecting === transfer.transferId;
+        const showRejectInput = rejecting === transfer.transferId;
+
+        return (
+          <div style={{ display: "flex", gap: "0.25rem", alignItems: "center", flexWrap: "wrap" }}>
             <button
               className="btn btn-ghost"
-              onClick={() => void handleRetry(transfer.transferId)}
-              disabled={retrying === transfer.transferId}
+              style={{ color: "var(--green)", fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
+              onClick={() => void handleComplete(transfer.transferId)}
+              disabled={isProcessing}
             >
-              {retrying === transfer.transferId ? "Retrying..." : "Retry"}
+              {completing === transfer.transferId ? "..." : "✓"}
             </button>
-          );
-        }
-        return null;
+            {showRejectInput ? (
+              <>
+                <input
+                  type="text"
+                  placeholder="Reason"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  style={{ width: "80px", fontSize: "0.75rem", padding: "0.2rem" }}
+                  autoFocus
+                />
+                <button
+                  className="btn btn-ghost"
+                  style={{ color: "var(--red)", fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
+                  onClick={() => void handleReject(transfer.transferId)}
+                >
+                  Reject
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
+                  onClick={() => { setRejecting(null); setRejectReason(""); }}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn btn-ghost"
+                style={{ color: "var(--red)", fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
+                onClick={() => setRejecting(transfer.transferId)}
+                disabled={isProcessing}
+              >
+                ✗
+              </button>
+            )}
+            {transfer.processAttempts > 0 && (
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: "0.8rem", padding: "0.25rem 0.5rem" }}
+                onClick={() => void handleRetry(transfer.transferId)}
+                disabled={isProcessing || retrying === transfer.transferId}
+              >
+                {retrying === transfer.transferId ? "..." : "Retry"}
+              </button>
+            )}
+          </div>
+        );
       }
     }
   ];
