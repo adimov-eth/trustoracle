@@ -376,7 +376,7 @@ INDEXER_POLL_INTERVAL=10000       # Indexer poll interval (ms)
 
 Separate React application for compliance administrators.
 
-**URL:** http://localhost:5174
+**URL:** https://api-trust.rubeton.app/ or http://localhost:5174
 
 ### Pages
 
@@ -419,7 +419,7 @@ All admin API requests require `X-Admin-Key` header matching `ADMIN_API_KEY` in 
 
 React + RainbowKit application for end users.
 
-**URL:** http://localhost:5173
+**URL:** https://trust.rubeton.app/ or http://localhost:5173
 
 ### Features
 
@@ -804,8 +804,5 @@ Runs three scenarios:
 
 ---
 
-## Contact
 
-For questions about this implementation, contact the development team.
-
-**Repository:** github.com/adimov-eth/trustmebro
+**Repository:** github.com/adimov-eth/trustoracle

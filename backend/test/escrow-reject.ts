@@ -16,7 +16,10 @@ import { xdcTestnet } from "viem/chains";
 
 const RPC_URL = "https://rpc.apothem.network";
 const TOKEN_ADDRESS = "0xf103aBe6039c49259Ee7c014a40603545476F6ef" as const;
-const PRIVATE_KEY = "<REDACTED_PRIVATE_KEY>" as const;
+const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}` | undefined;
+if (!PRIVATE_KEY) {
+  throw new Error("Missing DEPLOYER_PRIVATE_KEY");
+}
 const RED_WALLET = "0x1111111111111111111111111111111111111111" as const;
 const UNKNOWN_WALLET = "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as const;
 
